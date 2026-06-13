@@ -150,6 +150,16 @@ def configure(conf):
 	conf.env.append_unique('CXXFLAGS', cxxflags)
 	conf.env.append_unique('LINKFLAGS', linkflags)
 
+	# xash3d-streaming: MinGW cross-builds ship without the gcc runtime DLLs;
+	# -static-libstdc++ alone is defeated by waf's trailing -Wl,-Bdynamic
+	# lib marker, so also pull libstdc++ inside the static-lib group
+	if conf.env.DEST_OS == 'win32' and conf.env.COMPILER_CC != 'msvc':
+		conf.env.append_unique('LINKFLAGS', ['-static', '-static-libgcc', '-static-libstdc++'])
+		conf.env.append_unique('STLIB', 'stdc++')
+		# strip @N stdcall decoration from exports: the engine looks up
+		# GiveFnptrsToDll by its undecorated name, as MSVC exports it
+		conf.env.append_unique('LINKFLAGS', ['-Wl,--kill-at'])
+
 	if conf.env.COMPILER_CC != 'msvc' and not conf.options.DISABLE_WERROR:
 		opt_flags = [
 			# '-Wall', '-Wextra', '-Wpedantic',
@@ -255,12 +265,15 @@ def configure(conf):
 		pass
 	else:
 		conf.env.append_unique('CXXFLAGS', ['-Wno-invalid-offsetof', '-fno-exceptions'])
-		conf.define('stricmp', 'strcasecmp', quote=False)
-		conf.define('strnicmp', 'strncasecmp', quote=False)
-		conf.define('_snprintf', 'snprintf', quote=False)
-		conf.define('_vsnprintf', 'vsnprintf', quote=False)
-		conf.define('_LINUX', True)
-		conf.define('LINUX', True)
+		# xash3d-streaming: MinGW's CRT already has stricmp/_snprintf and is not
+		# Linux — the renames collide with its own snprintf declarations
+		if conf.env.DEST_OS != 'win32':
+			conf.define('stricmp', 'strcasecmp', quote=False)
+			conf.define('strnicmp', 'strncasecmp', quote=False)
+			conf.define('_snprintf', 'snprintf', quote=False)
+			conf.define('_vsnprintf', 'vsnprintf', quote=False)
+			conf.define('_LINUX', True)
+			conf.define('LINUX', True)
 
 	conf.msg(msg='-> processing mod options', result='...', color='BLUE')
 	regex = re.compile('^([A-Za-z0-9_-]+)=([A-Za-z0-9_-]+) # (.*)$')
