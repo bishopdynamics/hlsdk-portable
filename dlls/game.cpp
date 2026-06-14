@@ -462,6 +462,9 @@ cvar_t	sk_player_leg3	= { "sk_player_leg3","1" };
 
 cvar_t sv_pushable_fixed_tick_fudge = { "sv_pushable_fixed_tick_fudge", "15" };
 cvar_t sv_busters = { "sv_busters", "0" };
+// xash3d-streaming "insane things": when 1, the flashlight never drains (and tops
+// up to full), so it never auto-shuts-off. Default off, optional gameplay tweak.
+cvar_t flashlight_infinite = { "flashlight_infinite", "0", FCVAR_SERVER };
 
 // Register your console variables here
 // This gets called one time when the game is initialied
@@ -512,6 +515,7 @@ void GameDLLInit( void )
 
 	CVAR_REGISTER( &mp_chattime );
 	CVAR_REGISTER( &sv_busters );
+	CVAR_REGISTER( &flashlight_infinite );
 
 
 // REGISTER CVARS FOR SKILL LEVEL STUFF
