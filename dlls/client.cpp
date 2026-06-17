@@ -264,6 +264,7 @@ static float g_flCaptureAt = 0.0f;  // PostThink runs the capture at this time; 
 static float g_flRestoreAt = 0.0f;  // restore HUD/viewmodel at this time; 0 = idle
 static char  g_szCaptureMap[64];    // map the pending capture is for
 static char  g_szLastMap[64];       // last map seen by the capture watcher
+static float g_flSaveHud = 1.0f, g_flSaveVm = 1.0f, g_flSaveVer = 1.0f, g_flSaveNotify = 3.0f; // user cvars saved across a capture
 
 static bool Cont_CapturePath( const char *map, const char *ext, char *out, int size )
 {
@@ -350,8 +351,17 @@ static void Cont_MapCaptureThink( edict_t *pEntity )
 		{
 			ALERT( at_console, "[capture] capturing %s (loadout + screenshot)\n", g_szCaptureMap );
 			Cont_WriteLoadout( pl, g_szCaptureMap );
-			// hide HUD + gun for a clean thumbnail; screenshot grabs the next frame
-			CLIENT_COMMAND( pEntity, "hud_draw 0; r_drawviewmodel 0; screenshot \"capture/%s.png\"\n", g_szCaptureMap );
+
+			// save the user's HUD/overlay cvars, force a clean frame (no HUD, gun,
+			// version watermark or console notify), then restore them after the grab.
+			// This overrides the user's Screenshot Overlay setting so map shots are
+			// always clean.
+			g_flSaveHud = CVAR_GET_FLOAT( "hud_draw" );
+			g_flSaveVm = CVAR_GET_FLOAT( "r_drawviewmodel" );
+			g_flSaveVer = CVAR_GET_FLOAT( "scr_drawversion" );
+			g_flSaveNotify = CVAR_GET_FLOAT( "con_notifytime" );
+
+			CLIENT_COMMAND( pEntity, "hud_draw 0; r_drawviewmodel 0; scr_drawversion 0; con_notifytime 0; screenshot \"capture/%s.png\"\n", g_szCaptureMap );
 			g_flRestoreAt = gpGlobals->time + 0.2f;
 		}
 	}
@@ -359,7 +369,8 @@ static void Cont_MapCaptureThink( edict_t *pEntity )
 	if( g_flRestoreAt != 0.0f && gpGlobals->time >= g_flRestoreAt )
 	{
 		g_flRestoreAt = 0.0f;
-		CLIENT_COMMAND( pEntity, "hud_draw 1; r_drawviewmodel 1\n" );
+		CLIENT_COMMAND( pEntity, "hud_draw %g; r_drawviewmodel %g; scr_drawversion %g; con_notifytime %g\n",
+			g_flSaveHud, g_flSaveVm, g_flSaveVer, g_flSaveNotify );
 	}
 }
 
