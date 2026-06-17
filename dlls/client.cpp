@@ -314,7 +314,8 @@ static void Cont_WriteLoadout( CBasePlayer *pPlayer, const char *map )
 
 // Called every frame from PlayerPostThink. Detects map changes -- including
 // changelevel transitions, which do NOT re-run ClientPutInServer -- and on a
-// fresh map schedules the capture 0.1s out so the first frame is rendered first.
+// fresh map schedules the capture ~1s out so the chapter title card (drawn a
+// beat after the load) is on screen when we grab it.
 static void Cont_MapCaptureThink( edict_t *pEntity )
 {
 	if( CVAR_GET_FLOAT( "sv_capture_maps" ) != 0.0f )
@@ -333,7 +334,7 @@ static void Cont_MapCaptureThink( edict_t *pEntity )
 			{
 				strncpy( g_szCaptureMap, cur, sizeof( g_szCaptureMap ) - 1 );
 				g_szCaptureMap[sizeof( g_szCaptureMap ) - 1] = '\0';
-				g_flCaptureAt = gpGlobals->time + 0.1f;
+				g_flCaptureAt = gpGlobals->time + 1.0f;
 				ALERT( at_console, "[capture] scheduled for %s\n", cur );
 			}
 		}
