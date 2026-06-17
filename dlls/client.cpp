@@ -188,6 +188,8 @@ ClientPutInServer
 called each time a player is spawned
 ============
 */
+#include <sys/stat.h> // Continuum map-capture: mkdir() for the capture/ dir
+
 extern int gEvilImpulse101;
 
 // Continuum: a chapter launched from the menu passes its starting loadout in the
@@ -206,6 +208,7 @@ static void Cont_GiveChapterLoadout( CBasePlayer *pPlayer )
 	strncpy( buf, loadout, sizeof( buf ) - 1 );
 	buf[sizeof( buf ) - 1] = '\0';
 
+	bool gaveSuit = false;
 	gEvilImpulse101 = TRUE;
 	for( char *p = buf; *p; )
 	{
@@ -220,12 +223,143 @@ static void Cont_GiveChapterLoadout( CBasePlayer *pPlayer )
 		if( *p )
 			*p++ = '\0';
 
+		if( !strcmp( name, "item_suit" ))
+			gaveSuit = true;
 		pPlayer->GiveNamedItem( name );
 	}
 	gEvilImpulse101 = FALSE;
 
+	// uniform chapter-start policy: full health, full armor (when suited), and at
+	// least 50% of max ammo for every weapon just granted
+	pPlayer->pev->health = pPlayer->pev->max_health;
+	if( gaveSuit )
+		pPlayer->pev->armorvalue = 100;
+
+	for( int i = 0; i < MAX_ITEM_TYPES; i++ )
+	{
+		for( CBasePlayerItem *it = pPlayer->m_rgpPlayerItems[i]; it; it = it->m_pNext )
+		{
+			CBasePlayerWeapon *w = (CBasePlayerWeapon *)it;
+			const char *ammo = w->pszAmmo1();
+			if( !ammo || !ammo[0] )
+				continue;
+
+			int idx = CBasePlayer::GetAmmoIndex( ammo );
+			int half = w->iMaxAmmo1() / 2;
+			if( idx >= 0 && pPlayer->m_rgAmmo[idx] < half )
+				pPlayer->m_rgAmmo[idx] = half;
+		}
+	}
+
 	// consume it: only this first spawn of the chapter start gets the loadout
 	CVAR_SET_STRING( "sv_chapter_loadout", "" );
+}
+
+// --- Continuum dev map-capture (sv_capture_maps 1) -------------------------
+// On first arrival to each map, dump the player's weapons/items to
+// <gamedir>/capture/<map>.txt and grab a clean screenshot to
+// <gamedir>/capture/<map>.png (HUD + viewmodel hidden). tools/ingest-captures.py
+// folds these into redist/ (chapter thumbnails + chapters_<game>.lst loadouts).
+static float g_flCaptureAt = 0.0f;  // PostThink runs the capture at this time; 0 = idle
+static float g_flRestoreAt = 0.0f;  // restore HUD/viewmodel at this time; 0 = idle
+static char  g_szCaptureMap[64];    // map the pending capture is for
+static char  g_szLastMap[64];       // last map seen by the capture watcher
+
+static bool Cont_CapturePath( const char *map, const char *ext, char *out, int size )
+{
+	char gamedir[256];
+	GET_GAME_DIR( gamedir );
+	return snprintf( out, size, "%s/capture/%s.%s", gamedir, map, ext ) < size;
+}
+
+static bool Cont_CaptureExists( const char *map )
+{
+	char path[600];
+	if( !Cont_CapturePath( map, "txt", path, sizeof( path )))
+		return true; // path too long -> treat as done, don't capture
+
+	FILE *f = fopen( path, "rb" );
+	if( !f )
+		return false;
+	fclose( f );
+	return true;
+}
+
+static void Cont_WriteLoadout( CBasePlayer *pPlayer, const char *map )
+{
+	char gamedir[256], dir[300], path[600];
+
+	GET_GAME_DIR( gamedir );
+	snprintf( dir, sizeof( dir ), "%s/capture", gamedir );
+	mkdir( dir, 0755 ); // ignore EEXIST
+
+	if( !Cont_CapturePath( map, "txt", path, sizeof( path )))
+		return;
+
+	FILE *f = fopen( path, "w" );
+	ALERT( at_console, "[capture] loadout -> %s (%s)\n", path, f ? "ok" : "FAILED to open" );
+	if( !f )
+		return;
+
+	if( pPlayer->pev->weapons & ( 1 << WEAPON_SUIT ))
+		fprintf( f, "item_suit\n" );
+	if( pPlayer->m_fLongJump )
+		fprintf( f, "item_longjump\n" );
+
+	for( int i = 0; i < MAX_ITEM_TYPES; i++ )
+	{
+		for( CBasePlayerItem *it = pPlayer->m_rgpPlayerItems[i]; it; it = it->m_pNext )
+			fprintf( f, "%s\n", STRING( it->pev->classname ));
+	}
+	fclose( f );
+}
+
+// Called every frame from PlayerPostThink. Detects map changes -- including
+// changelevel transitions, which do NOT re-run ClientPutInServer -- and on a
+// fresh map schedules the capture 0.1s out so the first frame is rendered first.
+static void Cont_MapCaptureThink( edict_t *pEntity )
+{
+	if( CVAR_GET_FLOAT( "sv_capture_maps" ) != 0.0f )
+	{
+		const char *cur = STRING( gpGlobals->mapname );
+		if( strcmp( cur, g_szLastMap ) != 0 )
+		{
+			strncpy( g_szLastMap, cur, sizeof( g_szLastMap ) - 1 );
+			g_szLastMap[sizeof( g_szLastMap ) - 1] = '\0';
+
+			if( Cont_CaptureExists( cur ))
+			{
+				ALERT( at_console, "[capture] %s already captured, skipping\n", cur );
+			}
+			else
+			{
+				strncpy( g_szCaptureMap, cur, sizeof( g_szCaptureMap ) - 1 );
+				g_szCaptureMap[sizeof( g_szCaptureMap ) - 1] = '\0';
+				g_flCaptureAt = gpGlobals->time + 0.1f;
+				ALERT( at_console, "[capture] scheduled for %s\n", cur );
+			}
+		}
+	}
+
+	if( g_flCaptureAt != 0.0f && gpGlobals->time >= g_flCaptureAt )
+	{
+		g_flCaptureAt = 0.0f;
+		CBasePlayer *pl = (CBasePlayer *)GET_PRIVATE( pEntity );
+		if( pl )
+		{
+			ALERT( at_console, "[capture] capturing %s (loadout + screenshot)\n", g_szCaptureMap );
+			Cont_WriteLoadout( pl, g_szCaptureMap );
+			// hide HUD + gun for a clean thumbnail; screenshot grabs the next frame
+			CLIENT_COMMAND( pEntity, "hud_draw 0; r_drawviewmodel 0; screenshot \"capture/%s.png\"\n", g_szCaptureMap );
+			g_flRestoreAt = gpGlobals->time + 0.2f;
+		}
+	}
+
+	if( g_flRestoreAt != 0.0f && gpGlobals->time >= g_flRestoreAt )
+	{
+		g_flRestoreAt = 0.0f;
+		CLIENT_COMMAND( pEntity, "hud_draw 1; r_drawviewmodel 1\n" );
+	}
 }
 
 void ClientPutInServer( edict_t *pEntity )
@@ -840,6 +974,8 @@ void PlayerPostThink( edict_t *pEntity )
 
 	if( pPlayer )
 		pPlayer->PostThink();
+
+	Cont_MapCaptureThink( pEntity ); // Continuum: dev map-capture timing
 }
 
 void ParmsNewLevel( void )
