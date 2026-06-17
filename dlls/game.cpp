@@ -22,6 +22,7 @@ static cvar_t build_commit = { "sv_game_build_commit", g_VCSInfo_Commit };
 static cvar_t build_branch = { "sv_game_build_branch", g_VCSInfo_Branch };
 
 cvar_t displaysoundlist = {"displaysoundlist","0"};
+cvar_t sv_capture_maps = { "sv_capture_maps", "0", 0 }; // Continuum dev map-capture (see client.cpp)
 
 // multiplayer server rules
 cvar_t fragsleft	= { "mp_fragsleft","0", FCVAR_SERVER | FCVAR_UNLOGGED };	  // Don't spam console/log files/users with this changing
@@ -483,6 +484,7 @@ void GameDLLInit( void )
 	CVAR_REGISTER( &build_branch );
 
 	CVAR_REGISTER( &displaysoundlist );
+	CVAR_REGISTER( &sv_capture_maps );
 	CVAR_REGISTER( &allow_spectators );
 
 	CVAR_REGISTER( &teamplay );
