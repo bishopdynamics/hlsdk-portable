@@ -186,6 +186,46 @@ ClientPutInServer
 called each time a player is spawned
 ============
 */
+extern int gEvilImpulse101;
+
+// Continuum: a chapter launched from the menu passes its starting loadout in the
+// sv_chapter_loadout cvar (space-separated entity classnames, empty for none).
+// Grant it on the player's first spawn, then clear the cvar so respawns and
+// later (non-chapter) games don't repeat it. gEvilImpulse101 silences the pickup
+// sounds and stops the granted items from respawning.
+static void Cont_GiveChapterLoadout( CBasePlayer *pPlayer )
+{
+	const char *loadout = CVAR_GET_STRING( "sv_chapter_loadout" );
+
+	if( !loadout || !loadout[0] )
+		return;
+
+	char buf[256];
+	strncpy( buf, loadout, sizeof( buf ) - 1 );
+	buf[sizeof( buf ) - 1] = '\0';
+
+	gEvilImpulse101 = TRUE;
+	for( char *p = buf; *p; )
+	{
+		while( *p == ' ' || *p == '\t' )
+			p++;
+		if( !*p )
+			break;
+
+		char *name = p;
+		while( *p && *p != ' ' && *p != '\t' )
+			p++;
+		if( *p )
+			*p++ = '\0';
+
+		pPlayer->GiveNamedItem( name );
+	}
+	gEvilImpulse101 = FALSE;
+
+	// consume it: only this first spawn of the chapter start gets the loadout
+	CVAR_SET_STRING( "sv_chapter_loadout", "" );
+}
+
 void ClientPutInServer( edict_t *pEntity )
 {
 	CBasePlayer *pPlayer;
@@ -204,6 +244,9 @@ void ClientPutInServer( edict_t *pEntity )
 
 	pPlayer->pev->iuser1 = 0;
 	pPlayer->pev->iuser2 = 0;
+
+	// Continuum: hand a menu-selected chapter its starting loadout
+	Cont_GiveChapterLoadout( pPlayer );
 }
 
 #if !NO_VOICEGAMEMGR
