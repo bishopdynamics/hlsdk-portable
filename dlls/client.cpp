@@ -186,7 +186,13 @@ ClientPutInServer
 called each time a player is spawned
 ============
 */
-#include <sys/stat.h> // Continuum map-capture: mkdir() for the capture/ dir
+// Continuum map-capture: mkdir() for the capture/ dir. MinGW's mkdir takes no
+// mode arg and lives in <direct.h>, so split it from the POSIX form.
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
 
 extern int gEvilImpulse101;
 
@@ -290,7 +296,11 @@ static void Cont_WriteLoadout( CBasePlayer *pPlayer, const char *map )
 
 	GET_GAME_DIR( gamedir );
 	snprintf( dir, sizeof( dir ), "%s/capture", gamedir );
+#ifdef _WIN32
+	_mkdir( dir ); // ignore EEXIST (MinGW mkdir takes no mode)
+#else
 	mkdir( dir, 0755 ); // ignore EEXIST
+#endif
 
 	if( !Cont_CapturePath( map, "txt", path, sizeof( path )))
 		return;
