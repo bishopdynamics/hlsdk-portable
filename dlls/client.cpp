@@ -379,6 +379,12 @@ static void Cont_MapCaptureThink( edict_t *pEntity )
 		g_flRestoreAt = 0.0f;
 		CLIENT_COMMAND( pEntity, "hud_draw %g; r_drawviewmodel %g; scr_drawversion %g; con_notifytime %g\n",
 			g_flSaveHud, g_flSaveVm, g_flSaveVer, g_flSaveNotify );
+
+		// Tell the player on-screen that the grab happened. Done here (after the
+		// HUD is restored and the screenshot already taken) so the message never
+		// lands in the captured frame.
+		ClientPrint( &pEntity->v, HUD_PRINTCENTER,
+			UTIL_VarArgs( "map thumbnail captured for %s\n", g_szCaptureMap ));
 	}
 }
 
