@@ -4133,7 +4133,7 @@ void CBasePlayer::UpdateClientData( void )
 		{
 			// xash3d-streaming: optional infinite battery — keep it topped up and
 			// never auto-shut-off (gameplay tweak + makes flashlight testing sane)
-			if( flashlight_infinite.value )
+			if( CVAR_GET_FLOAT( "flashlight_infinite" ) != 0.0f )
 			{
 				m_flFlashLightTime = FLASH_DRAIN_TIME + gpGlobals->time;
 				m_iFlashBattery = 100;

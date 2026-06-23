@@ -463,9 +463,11 @@ cvar_t	sk_player_leg3	= { "sk_player_leg3","1" };
 
 cvar_t sv_pushable_fixed_tick_fudge = { "sv_pushable_fixed_tick_fudge", "15" };
 cvar_t sv_busters = { "sv_busters", "0" };
-// xash3d-streaming "insane things": when 1, the flashlight never drains (and tops
-// up to full), so it never auto-shuts-off. Default off, optional gameplay tweak.
-cvar_t flashlight_infinite = { "flashlight_infinite", "0", FCVAR_SERVER };
+// flashlight_infinite (when 1: flashlight never drains, tops up to full, never
+// auto-shuts-off) is registered by the ENGINE as FCVAR_ARCHIVE before config.cfg
+// is exec'd, so its saved value persists across launches; the game reads it live
+// via CVAR_GET_FLOAT. A game-dll cvar registered after config exec would reset to
+// its default on every boot (and isn't even present while sitting at the menu).
 
 // Register your console variables here
 // This gets called one time when the game is initialied
@@ -517,7 +519,8 @@ void GameDLLInit( void )
 
 	CVAR_REGISTER( &mp_chattime );
 	CVAR_REGISTER( &sv_busters );
-	CVAR_REGISTER( &flashlight_infinite );
+	// flashlight_infinite is registered by the engine (FCVAR_ARCHIVE) so it persists;
+	// the game reads it via CVAR_GET_FLOAT. See note at its old definition above.
 
 
 // REGISTER CVARS FOR SKILL LEVEL STUFF
